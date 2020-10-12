@@ -134,10 +134,10 @@ async function task_1_6(db) {
 		ProductName,
 		Categories.CategoryName,
 		Suppliers.CompanyName AS 'SupplierCompanyName'
-            FROM ((Products
+            FROM (Products
             INNER JOIN Categories 
                 ON Products.CategoryID = Categories.CategoryID)
-            INNER JOIN Suppliers ON Products.SupplierID = Suppliers.SupplierID)
+            INNER JOIN Suppliers ON Products.SupplierID = Suppliers.SupplierID
         ORDER BY ProductName, Suppliers.CompanyName;
     `);
     return result[0];
@@ -281,7 +281,7 @@ async function task_1_12(db) {
 async function task_1_13(db) {
     let result = await db.query(`
         SELECT 
-            count(*) AS TotalOfCurrentProducts,
+            (SELECT COUNT(*) FROM Products) AS TotalOfCurrentProducts,
             SUM(Discontinued) AS TotalOfDiscontinuedProducts
         FROM Products
     `);
@@ -317,18 +317,18 @@ async function task_1_14(db) {
 async function task_1_15(db) {
     let result = await db.query(`
         SELECT 
-            SUM(MONTH(OrderDate)=1) AS 'January',
-            SUM(MONTH(OrderDate)=2) AS 'February',
-            SUM(MONTH(OrderDate)=3) AS 'March',
-            SUM(MONTH(OrderDate)=4) AS 'April',
-            SUM(MONTH(OrderDate)=5) AS 'May',
-            SUM(MONTH(OrderDate)=6) AS 'June',
-            SUM(MONTH(OrderDate)=7) AS 'July',
-            SUM(MONTH(OrderDate)=8) AS 'August',
-            SUM(MONTH(OrderDate)=9) AS 'September',
-            SUM(MONTH(OrderDate)=10) AS 'October',
-            SUM(MONTH(OrderDate)=11) AS 'November',
-            SUM(MONTH(OrderDate)=12) AS 'December'
+            COUNT(IF(MONTH(OrderDate) = 1, 1, NULL)) AS 'January',
+            COUNT(IF(MONTH(OrderDate) = 2, 1, NULL)) AS 'February',
+            COUNT(IF(MONTH(OrderDate) = 3, 1, NULL)) AS 'March',
+            COUNT(IF(MONTH(OrderDate) = 4, 1, NULL)) AS 'April',
+            COUNT(IF(MONTH(OrderDate) = 5, 1, NULL)) AS 'May',
+            COUNT(IF(MONTH(OrderDate) = 6, 1, NULL)) AS 'June',
+            COUNT(IF(MONTH(OrderDate) = 7, 1, NULL)) AS 'July',
+            COUNT(IF(MONTH(OrderDate) = 8, 1, NULL)) AS 'August',
+            COUNT(IF(MONTH(OrderDate) = 9, 1, NULL)) AS 'September',
+            COUNT(IF(MONTH(OrderDate) = 10, 1, NULL)) AS 'October',
+            COUNT(IF(MONTH(OrderDate) = 11, 1, NULL)) AS 'November',
+            COUNT(IF(MONTH(OrderDate) = 12, 1, NULL)) AS 'December'
         FROM Orders
         WHERE YEAR(OrderDate)=1997;
     `);
@@ -472,19 +472,25 @@ async function task_1_21(db) {
  */
 async function task_1_22(db) {
     let result = await db.query(`
-        SELECT DISTINCT 
-        Customers.CompanyName,
-		Products.ProductName,
-		OrderDetails.UnitPrice as 'PricePerItem'
+        SELECT DISTINCT
+            Customers.CompanyName,
+            Products.ProductName,
+            OrderDetails.UnitPrice as 'PricePerItem'
         FROM Customers
-        LEFT JOIN Orders ON Customers.CustomerID = Orders.CustomerID
-        LEFT JOIN OrderDetails ON OrderDetails.OrderID = Orders.OrderID
-        LEFT JOIN Products ON OrderDetails.ProductID = Products.ProductID
-        WHERE OrderDetails.UnitPrice = (SELECT MAX(odt.UnitPrice) as 'MaxPrice'     FROM Customers cus
-            INNER JOIN Orders ord ON Customers.CustomerID = ord.CustomerID
-            INNER JOIN OrderDetails odt ON odt.OrderID = ord.OrderID
-            WHERE Customers.CustomerID = cus.CustomerID)
-        
+            INNER JOIN Orders ON Customers.CustomerID = Orders.CustomerID
+            INNER JOIN OrderDetails ON OrderDetails.OrderID = Orders.OrderID
+            INNER JOIN Products ON Products.ProductID = OrderDetails.ProductID
+            INNER JOIN (
+                SELECT
+                    cus.CustomerID,
+                    MAX(odt.UnitPrice) as 'MaxPrice'
+                FROM Customers cus
+                    INNER JOIN Orders ord ON cus.CustomerID = ord.CustomerID
+                    INNER JOIN OrderDetails odt ON odt.OrderID = ord.OrderID
+                    GROUP BY cus.CustomerID
+            ) sub
+            ON sub.CustomerID = Customers.CustomerID AND sub.MaxPrice = OrderDetails.UnitPrice
+
         ORDER BY OrderDetails.UnitPrice DESC,
             Customers.CompanyName,
             Products.ProductName
